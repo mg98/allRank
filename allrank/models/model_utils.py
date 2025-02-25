@@ -15,7 +15,12 @@ def get_torch_device():
     Getter for an available pyTorch device.
     :return: CUDA-capable GPU if available, CPU otherwise
     """
-    return torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
+    if torch.cuda.is_available():
+        return torch.device("cuda:0")
+    elif torch.backends.mps.is_available():
+        return torch.device("mps")
+    else:
+        return torch.device("cpu")
 
 
 def get_num_params(model: nn.Module) -> int:

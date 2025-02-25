@@ -40,16 +40,47 @@ def __rank_slates(dataloader: DataLoader, model: LTRModel) -> Tuple[torch.Tensor
     model.eval()
     device = get_torch_device()
     with torch.no_grad():
-        for xb, yb, _ in dataloader:
+        for xb, yb, indices, qids in dataloader:
+            qids = qids.squeeze(-1)
+
             X = xb.type(torch.float32).to(device=device)
             y_true = yb.to(device=device)
+            indices = indices.to(device=device)
 
             input_indices = torch.ones_like(y_true).type(torch.long)
             mask = (y_true == losses.PADDED_Y_VALUE)
             scores = model.score(X, mask, input_indices)
 
-            scores[mask] = float('-inf')
+            # Iterate over each query in the batch
+            for i in range(scores.size(0)):
+                query_id = qids[i].item()
+                slate_scores = scores[i]
+                slate_labels = y_true[i]
+                slate_indices = indices[i]
+                slate_mask = mask[i]
+                
+                valid_scores = slate_scores[~slate_mask]
+                valid_labels = slate_labels[~slate_mask]
+                valid_indices = slate_indices[~slate_mask]
+                
+                if valid_scores.numel() == 0:
+                    print(f"Query ID: {query_id} has no valid documents.")
+                    continue
+                
+                # Optionally, compute the rankings
+                sorted_scores, sorted_idx = torch.sort(valid_scores, descending=True)
+                sorted_labels = valid_labels[sorted_idx]
+                sorted_original_indices = valid_indices[sorted_idx]
+                
+                # Debugging output
+                print(f"Query ID: {query_id}")
+                print(f"{'Rank':<5}{'Score':<10}{'Label':<10}{'Original Index':<15}")
+                for rank, (score, label, idx) in enumerate(zip(sorted_scores, sorted_labels, sorted_original_indices), start=1):
+                    print(f"{rank:<5}{score.item():<10.4f}{int(label.item()):<10}{int(idx.item()):<15}")
+                print("-" * 40)
 
+            scores[mask] = float('-inf')
+            
             _, indices = scores.sort(descending=True, dim=-1)
             indices_X = torch.unsqueeze(indices, -1).repeat_interleave(X.shape[-1], -1)
             reranked_X.append(torch.gather(X, dim=1, index=indices_X).cpu())

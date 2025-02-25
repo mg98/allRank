@@ -5,6 +5,7 @@ from allrank.models.losses import DEFAULT_EPS
 from allrank.models.losses.loss_utils import deterministic_neural_sort, sinkhorn_scaling, stochastic_neural_sort
 from allrank.models.metrics import dcg
 from allrank.models.model_utils import get_torch_device
+import math
 
 
 def neuralNDCG(y_pred, y_true, padded_value_indicator=PADDED_Y_VALUE, temperature=1., powered_relevancies=True, k=None,
@@ -29,7 +30,7 @@ def neuralNDCG(y_pred, y_true, padded_value_indicator=PADDED_Y_VALUE, temperatur
     if k is None:
         k = y_true.shape[1]
 
-    mask = (y_true == padded_value_indicator)
+    mask = (y_true == padded_value_indicator).to(dev)
     # Choose the deterministic/stochastic variant
     if stochastic:
         P_hat = stochastic_neural_sort(y_pred.unsqueeze(-1), n_samples=n_samples, tau=temperature, mask=mask,
@@ -46,7 +47,7 @@ def neuralNDCG(y_pred, y_true, padded_value_indicator=PADDED_Y_VALUE, temperatur
     P_hat = P_hat.masked_fill(mask[None, :, :, None] | mask[None, :, None, :], 0.)
     y_true_masked = y_true.masked_fill(mask, 0.).unsqueeze(-1).unsqueeze(0)
     if powered_relevancies:
-        y_true_masked = torch.pow(2., y_true_masked) - 1.
+        y_true_masked = torch.exp(y_true_masked * math.log(2.0)) - 1.
 
     ground_truth = torch.matmul(P_hat, y_true_masked).squeeze(-1)
     discounts = (torch.tensor(1.) / torch.log2(torch.arange(y_true.shape[-1], dtype=torch.float) + 2.)).to(dev)

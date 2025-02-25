@@ -84,6 +84,7 @@ with open(test_normalized_path, "w"):
 
 vali_normalized_path = os.path.join(ds_normalized_path, "vali.txt")
 with open(vali_normalized_path, "w"):
+    a = x_vali_normalized.T
     dump_svmlight_file(x_vali_normalized.T, y_vali, vali_normalized_path, query_id=query_ids_vali)
 
 print("Dataset with normalized features saved here: {}.".format(ds_normalized_path))

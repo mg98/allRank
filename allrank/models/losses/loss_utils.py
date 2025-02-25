@@ -45,7 +45,6 @@ def deterministic_neural_sort(s, tau, mask):
 
     n = s.size()[1]
     one = torch.ones((n, 1), dtype=torch.float32, device=dev)
-    s = s.masked_fill(mask[:, :, None], -1e8)
     A_s = torch.abs(s - s.permute(0, 2, 1))
     A_s = A_s.masked_fill(mask[:, :, None] | mask[:, None, :], 0.0)
 

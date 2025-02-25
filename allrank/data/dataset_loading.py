@@ -175,7 +175,6 @@ def load_libsvm_role(input_path: str, role: str) -> LibSVMDataset:
     :return: LibSVMDataset from file {input_path}/{role}.txt
     """
     path = os.path.join(input_path, "{}.txt".format(role))
-    logger.info("will load {} data from {}".format(role, path))
     with open_local_or_gs(path, "rb") as input_stream:
         ds = LibSVMDataset.from_svm_file(input_stream)
     logger.info("{} DS shape: {}".format(role, ds.shape))

@@ -16,7 +16,8 @@ reqs = [
     "tensorboardX>=2.1.0",
     "gcsfs==0.6.2",
     "google-auth>=2.15.0",
-    "fsspec <= 2023.1.0"
+    "fsspec <= 2023.1.0",
+    "wandb"
 ]
 
 setup(

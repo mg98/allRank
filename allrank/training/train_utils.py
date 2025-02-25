@@ -11,6 +11,7 @@ from allrank.models.model_utils import get_num_params, log_num_params
 from allrank.training.early_stop import EarlyStop
 from allrank.utils.ltr_logging import get_logger
 from allrank.utils.tensorboard_utils import TensorboardSummaryWriter
+import wandb
 
 logger = get_logger()
 
@@ -18,7 +19,7 @@ logger = get_logger()
 def loss_batch(model, loss_func, xb, yb, indices, gradient_clipping_norm, opt=None):
     mask = (yb == PADDED_Y_VALUE)
     loss = loss_func(model(xb, mask, indices), yb)
-
+    
     if opt is not None:
         loss.backward()
         if gradient_clipping_norm:
@@ -76,8 +77,8 @@ def get_current_lr(optimizer):
 
 
 def fit(epochs, model, loss_func, optimizer, scheduler, train_dl, valid_dl, config,
-        gradient_clipping_norm, early_stopping_patience, device, output_dir, tensorboard_output_path):
-    tensorboard_summary_writer = TensorboardSummaryWriter(tensorboard_output_path)
+        gradient_clipping_norm, early_stopping_patience, device, output_dir=None, tensorboard_output_path=None, wandb_logging=False):
+    tensorboard_summary_writer = TensorboardSummaryWriter(tensorboard_output_path) if tensorboard_output_path else None
 
     num_params = get_num_params(model)
     log_num_params(num_params)
@@ -108,17 +109,27 @@ def fit(epochs, model, loss_func, optimizer, scheduler, train_dl, valid_dl, conf
 
         val_loss = np.sum(np.multiply(val_losses, val_nums)) / np.sum(val_nums)
 
-        tensorboard_metrics_dict = {("train", "loss"): train_loss, ("val", "loss"): val_loss}
-
-        train_metrics_to_tb = {("train", name): value for name, value in train_metrics.items()}
-        tensorboard_metrics_dict.update(train_metrics_to_tb)
-        val_metrics_to_tb = {("val", name): value for name, value in val_metrics.items()}
-        tensorboard_metrics_dict.update(val_metrics_to_tb)
-        tensorboard_metrics_dict.update({("train", "lr"): get_current_lr(optimizer)})
-
-        tensorboard_summary_writer.save_to_tensorboard(tensorboard_metrics_dict, epoch)
+        if tensorboard_summary_writer:
+            tensorboard_metrics_dict = {("train", "loss"): train_loss, ("val", "loss"): val_loss}
+            train_metrics_to_tb = {("train", name): value for name, value in train_metrics.items()}
+            tensorboard_metrics_dict.update(train_metrics_to_tb)
+            val_metrics_to_tb = {("val", name): value for name, value in val_metrics.items()}
+            tensorboard_metrics_dict.update(val_metrics_to_tb)
+            tensorboard_metrics_dict.update({("train", "lr"): get_current_lr(optimizer)})
+            tensorboard_summary_writer.save_to_tensorboard(tensorboard_metrics_dict, epoch)
 
         logger.info(epoch_summary(epoch, train_loss, val_loss, train_metrics, val_metrics))
+        
+        if wandb_logging:
+            wandb.log({
+                "train_loss": train_loss,
+                "val_loss": val_loss,
+                **{
+                    f"{metric}_{k}": val_metrics.get(f"{metric}_{k}")
+                    for metric, ks in config.metrics.items()
+                    for k in ks
+                }
+            })
 
         current_val_metric_value = val_metrics.get(config.val_metric)
         if scheduler:
@@ -136,8 +147,10 @@ def fit(epochs, model, loss_func, optimizer, scheduler, train_dl, valid_dl, conf
                 ))
             break
 
-    torch.save(model.state_dict(), os.path.join(output_dir, "model.pkl"))
-    tensorboard_summary_writer.close_all_writers()
+    if output_dir:  
+        torch.save(model.state_dict(), os.path.join(output_dir, "model.pkl"))
+    if tensorboard_summary_writer:
+        tensorboard_summary_writer.close_all_writers()
 
     return {
         "epochs": epoch,
